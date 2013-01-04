@@ -47,7 +47,7 @@ describe ActiveFedora::NtriplesRDFDatastream do
       @subject.title.should == ["Title of work"]
       @subject.publisher.should == ["Penn State"]
       @subject.based_near.should == ["New York, NY, US"]
-      @subject.related_url.should == ["http://google.com/"]
+      @subject.related_url.should == [RDF::URI("http://google.com/"), RDF::URI("http://yahoo.com/")]
     end
 
     it "should delegate as_json to the fields" do
@@ -76,7 +76,7 @@ describe ActiveFedora::NtriplesRDFDatastream do
     end
     it "should delete fields" do
       @subject.related_url.delete(RDF::URI("http://google.com/"))
-      @subject.related_url.should == []
+      @subject.related_url.should == ["http://yahoo.com/"]
     end
   end
 

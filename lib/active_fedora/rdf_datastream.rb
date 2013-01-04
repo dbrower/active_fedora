@@ -70,6 +70,7 @@ module ActiveFedora
         raise "mapping must specify RDF vocabulary as :in argument" unless args.has_key? :in
         vocab = args[:in]
         predicate = args.fetch(:to, name)
+        format = args[:format]
         raise "Vocabulary '#{vocab.inspect}' does not define property '#{predicate.inspect}'" unless vocab.respond_to? predicate
         indexing = false
         if block_given?
@@ -84,25 +85,12 @@ module ActiveFedora
         # functionality below
         vocab = vocab.to_s
         name = self.prefix(name)
-        if config
-          if config[:predicate_mapping].has_key? vocab
-            config[:predicate_mapping][vocab][name] = predicate
-          else
-            config[:predicate_mapping][vocab] = { name => predicate } 
-          end
+        ActiveFedora::Predicates.add_predicate(name, vocab, predicate)
+        if indexing
           # stuff data_type and behaviors in there for to_solr support
-          config[:predicate_mapping][vocab]["#{name}__type".to_sym] = data_type if indexing
-          config[:predicate_mapping][vocab]["#{name}__behaviors".to_sym] = behaviors if indexing
-        else
-          config = {
-            :default_namespace => vocab,
-            :predicate_mapping => {
-              vocab => { name => predicate }
-            }
-          }
-          # stuff data_type and behaviors in there for to_solr support
-          config[:predicate_mapping][vocab]["#{name}__type".to_sym] = data_type if indexing
-          config[:predicate_mapping][vocab]["#{name}__behaviors".to_sym] = behaviors if indexing
+          # TODO: is there a better way to store this information?
+          ActiveFedora::Predicates.add_predicate("#{name}__type".to_sym, vocab, data_type)
+          ActiveFedora::Predicates.add_predicate("#{name}__behaviors".to_sym, vocab, behaviors)
         end
       end
     end
@@ -110,26 +98,29 @@ module ActiveFedora
 
     class TermProxy
 
-      attr_reader :graph, :subject, :predicate
+      attr_reader :graph, :subject, :predicate, :format
       delegate :class, :to_s, :==, :kind_of?, :each, :map, :empty?, :as_json, :is_a?, :to => :values
 
-      def initialize(graph, subject, predicate)
+      def initialize(graph, subject, predicate, format=nil)
         @graph = graph
-
         @subject = subject
         @predicate = predicate
+        @format = format
       end
 
-      def <<(*values)
-        values.each { |value| graph.append(subject, predicate, value) }
+      def <<(*values_to_add)
+        values_to_add.each do |value|
+          value = format.translate_to_storage(value) if format
+          graph.append(subject, predicate, value)
+        end
         values
       end
 
-      def delete(*values)
-        values.each do |value| 
+      def delete(*values_to_delete)
+        values_to_delete.each do |value|
+          value = format.translate_to_storage(value) if format
           graph.delete_predicate(subject, predicate, value)
         end
-
         values
       end
 
@@ -139,14 +130,14 @@ module ActiveFedora
         graph.query(subject, predicate).each do |solution|
           v = solution.value
           v = v.to_s if v.is_a? RDF::Literal
+          v = format.translate_from_storage(v) if format
           values << v
         end
 
         values
       end
-      
-      def method_missing(method, *args, &block)
 
+      def method_missing(method, *args, &block)
         if values.respond_to? method
           values.send(method, *args, &block)
         else
@@ -154,7 +145,7 @@ module ActiveFedora
         end
       end
     end
-    
+
     attr_accessor :loaded
     def metadata?
       true
@@ -227,9 +218,14 @@ module ActiveFedora
 
     # @param [Symbol, RDF::URI] predicate  the predicate to insert into the graph
     def find_predicate(predicate)
-      predicate = self.class.prefix(predicate) unless predicate.kind_of? RDF::URI
+      return predicate if predicate.kind_of? RDF::URI
+      predicate = self.class.prefix(predicate)
       result = ActiveFedora::Predicates.find_predicate(predicate)
       RDF::URI(result.reverse.join)
+    end
+
+    def find_predicate_format(predicate)
+      
     end
 
     # Populate a RDFDatastream object based on the "datastream" content 
@@ -258,7 +254,7 @@ module ActiveFedora
     end
 
     def query subject, predicate, &block
-      predicate = find_predicate(predicate) unless predicate.kind_of? RDF::URI
+      predicate = find_predicate(predicate)
       
       q = RDF::Query.new do
         pattern [subject, predicate, :value]
@@ -269,8 +265,7 @@ module ActiveFedora
 
     # @param [Symbol, RDF::URI] predicate  the predicate to insert into the graph
     def get_values(subject, predicate)
-
-      predicate = find_predicate(predicate) unless predicate.kind_of? RDF::URI
+      predicate = find_predicate(predicate)
 
       return TermProxy.new(self, subject, predicate)
     end
@@ -279,8 +274,7 @@ module ActiveFedora
     # @param [Symbol, RDF::URI] predicate  the predicate to insert into the graph
 
     def set_value(subject, predicate, values)
-      
-      predicate = find_predicate(predicate) unless predicate.kind_of? RDF::URI
+      predicate = find_predicate(predicate)
 
       delete_predicate(subject, predicate)
 
@@ -295,7 +289,7 @@ module ActiveFedora
     end
  
     def delete_predicate(subject, predicate, values = nil)
-      predicate = find_predicate(predicate) unless predicate.kind_of? RDF::URI
+      predicate = find_predicate(predicate)
 
       if values.nil?
         query = RDF::Query.new do
@@ -318,7 +312,6 @@ module ActiveFedora
     def append(subject, predicate, args)
       graph.insert([subject, predicate, args])
 
-
       return TermProxy.new(self, subject, predicate)
     end
 
@@ -328,8 +321,8 @@ module ActiveFedora
 
     def method_missing(name, *args)
       if (md = /^([^=]+)=$/.match(name.to_s)) && pred = find_predicate(md[1])
-        set_value(rdf_subject, pred, *args)  
-       elsif pred = find_predicate(name)
+        set_value(rdf_subject, pred, *args)
+      elsif pred = find_predicate(name)
         get_values(rdf_subject, name)
       else 
         super
