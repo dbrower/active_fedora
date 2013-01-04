@@ -5,22 +5,16 @@ module ActiveFedora
       case predicate
       when :has_model, "hasModel", :hasModel
         xmlns="info:fedora/fedora-system:def/model#"
-        begin
-          rel_predicate = predicate_lookup(predicate,xmlns)
-        rescue UnregisteredPredicateError
-          xmlns = nil
-          rel_predicate = nil
-        end
       else
         xmlns="info:fedora/fedora-system:def/relations-external#"
-        begin
-          rel_predicate = predicate_lookup(predicate,xmlns)
-        rescue UnregisteredPredicateError
-          xmlns = nil
-          rel_predicate = nil
-        end
       end
-        
+      begin
+        rel_predicate = predicate_lookup(predicate,xmlns)
+      rescue UnregisteredPredicateError
+        xmlns = nil
+        rel_predicate = nil
+      end
+
       unless xmlns && rel_predicate
         rel_predicate, xmlns = find_predicate(predicate)
       end
@@ -61,12 +55,25 @@ module ActiveFedora
       @@predicate_config ||= ActiveFedora.predicate_config
     end
 
+    # add a mapping of the symbol `name` to `namespace`+`predicate`
+    def self.add_predicate(name, namespace, predicate)
+      pm = predicate_mappings
+      if pm.has_key?(namespace)
+        pm[namespace][name] = predicate
+      else
+        pm[namespace] = { name => predicate }
+      end
+      if predicate_config[:default_namespace].nil?
+        predicate_config[:default_namespace] = namespace
+      end
+    end
+
     def self.predicate_namespaces
       predicate_config[:predicate_namespaces] ||= {}
     end
     
     def self.predicate_mappings
-      predicate_config[:predicate_mapping]
+      predicate_config[:predicate_mapping] ||= {}
     end
 
     def self.default_predicate_namespace
