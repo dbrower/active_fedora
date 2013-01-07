@@ -14,9 +14,6 @@ module ActiveFedora
     end
     
     def add(predicate, object, literal=false)
-      unless relationships.has_key? predicate
-        relationships[predicate] = []
-      end
       object = RDF::Literal.new(object) if literal
       unless relationships[predicate].include?(object)
         @dirty = true
@@ -28,21 +25,20 @@ module ActiveFedora
     # [predicate] the predicate to delete
     # [object] the object to delete, if nil, all statements with this predicate are deleted.
     def delete(predicate, object = nil)
-      return unless relationships.has_key? predicate
+      return unless self.has_predicate?(predicate)
       if object.nil?
         @dirty = true
         relationships.delete(predicate)
-        return
-      end
-      if relationships[predicate].include?(object)
+      elsif relationships[predicate].include?(object)
         @dirty = true
         relationships[predicate].delete(object)
-      end
-      if object.respond_to?(:internal_uri) && relationships[predicate].include?(object.internal_uri)
+      elsif object.respond_to?(:internal_uri) && relationships[predicate].include?(object.internal_uri)
         @dirty = true
         relationships[predicate].delete(object.internal_uri)
       elsif object.is_a? String 
+        start_size = relationships[predicate].size
         relationships[predicate].delete_if{|obj| obj.respond_to?(:internal_uri) && obj.internal_uri == object}
+        @dirty = true if start_size != relationships[predicate].size
       end
     end
 
