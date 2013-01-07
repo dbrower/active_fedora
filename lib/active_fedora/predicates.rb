@@ -34,7 +34,7 @@ module ActiveFedora
     # If predicate is not a Symbol, returns the predicate untouched
     # @raise UnregisteredPredicateError if the predicate is a symbol but is not found in the predicate_mappings
     def self.predicate_lookup(predicate,namespace="info:fedora/fedora-system:def/relations-external#")
-      if predicate.class == Symbol 
+      if predicate.is_a?(Symbol)
         if predicate_mappings[namespace].has_key?(predicate)
           return predicate_mappings[namespace][predicate]
         else
@@ -80,6 +80,8 @@ module ActiveFedora
       predicate_config[:default_namespace]
     end
 
+    # given a predicate symbol, return a tuple
+    # giving the resolved predicate name and namespace
     def self.find_predicate(predicate)
       predicate_mappings.each do |namespace,predicates|
         if predicates.fetch(predicate,nil)
@@ -87,6 +89,19 @@ module ActiveFedora
         end
       end
       raise ActiveFedora::UnregisteredPredicateError, "Unregistered predicate: #{predicate.inspect}"
+    end
+
+    # given a full URI of a predicate, map it back to a short
+    # predicate symbol
+    def self.short_predicate(predicate)
+      if match = /^(#{predicate_mappings.keys.sort.reverse.join('|')})(.+)$/.match(predicate.to_str)
+        namespace = match[1]
+        predicate = match[2]
+        pred = predicate_mappings[namespace].invert[predicate]
+        pred
+      else
+        raise "Unable to parse predicate: #{predicate}"
+      end
     end
 
   end

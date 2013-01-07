@@ -59,7 +59,7 @@ module ActiveFedora
         RDF::RDFXML::Reader.new(xml) do |reader|
           reader.each_statement do |statement|
             literal = statement.object.kind_of?(RDF::Literal)
-            predicate = self.short_predicate(statement.predicate)
+            predicate = Predicates.short_predicate(statement.predicate)
             object = literal ? statement.object.value : statement.object.to_str
             tmpl.model.add_relationship(predicate, object, literal)
           end
@@ -98,17 +98,17 @@ module ActiveFedora
       end
     end
 
-    def self.short_predicate(predicate)
-      # for this regex to short-circuit correctly, namespaces must be sorted into descending order by length
-      if match = /^(#{Predicates.predicate_mappings.keys.sort.reverse.join('|')})(.+)$/.match(predicate.to_str)
-        namespace = match[1]
-        predicate = match[2]
-        pred = Predicates.predicate_mappings[namespace].invert[predicate]
-        pred
-      else
-        raise "Unable to parse predicate: #{predicate}"
-      end
-    end
+    # def self.short_predicate(predicate)
+    #   # for this regex to short-circuit correctly, namespaces must be sorted into descending order by length
+    #   if match = /^(#{Predicates.predicate_mappings.keys.sort.reverse.join('|')})(.+)$/.match(predicate.to_str)
+    #     namespace = match[1]
+    #     predicate = match[2]
+    #     pred = Predicates.predicate_mappings[namespace].invert[predicate]
+    #     pred
+    #   else
+    #     raise "Unable to parse predicate: #{predicate}"
+    #   end
+    # end
     
     
     # ** EXPERIMENTAL **
