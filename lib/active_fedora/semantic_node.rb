@@ -35,9 +35,7 @@ module ActiveFedora
     # Clears all relationships with the specified predicate
     # @param predicate
     def clear_relationship(predicate)
-      relationships(predicate).each do |target|
-        object_relations.delete(predicate, target) 
-      end
+      object_relations.delete(predicate)
       rels_ext.content_will_change! if object_relations.dirty
     end
 
